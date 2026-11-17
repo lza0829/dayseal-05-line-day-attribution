@@ -57,3 +57,43 @@ def list_batches(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 
 def list_variances(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return [dict(r) for r in conn.execute("SELECT * FROM variance_rows ORDER BY id DESC").fetchall()]
+
+
+def add_correction(conn: sqlite3.Connection, **fields: Any) -> int:
+    """写归属校正留痕；只在发生日覆盖声明日时调用。"""
+    cur = conn.execute(
+        '''INSERT INTO attribution_corrections(
+             line_id, line_no, action, declared_business_day, occurred_day,
+             stored_business_day, occurred_at, reason, created_at
+           ) VALUES (?,?,?,?,?,?,?,?,?)''',
+        (
+            fields["line_id"],
+            fields["line_no"],
+            fields["action"],
+            fields["declared_business_day"],
+            fields["occurred_day"],
+            fields["stored_business_day"],
+            fields["occurred_at"],
+            fields.get("reason"),
+            fields["created_at"],
+        ),
+    )
+    return int(cur.lastrowid)
+
+
+def list_corrections(
+    conn: sqlite3.Connection, business_day: str | None = None
+) -> list[dict[str, Any]]:
+    """归属校正留痕；``business_day`` 过滤的是落库日，与合计同源。"""
+    if business_day:
+        rows = conn.execute(
+            "SELECT * FROM attribution_corrections WHERE stored_business_day=? "
+            "ORDER BY id DESC",
+            (business_day,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM attribution_corrections ORDER BY id DESC"
+        ).fetchall()
+    return [dict(r) for r in rows]
+

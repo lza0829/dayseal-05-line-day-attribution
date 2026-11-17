@@ -35,6 +35,10 @@ onMounted(load)
     <p>营业日 {{ preview.business_day }} · 笔数 {{ preview.line_count }} · 系统合计 {{ preview.system_total.toFixed(2) }}
       <span class="tag" :class="preview.sealed ? 'ok' : 'warn'">{{ preview.sealed ? '已封' : '未封' }}</span>
     </p>
+    <p class="msg" v-if="preview.corrected_count">
+      其中 {{ preview.corrected_count }} 笔为跨日改归（合计 {{ preview.corrected_total.toFixed(2) }}），已计入上式；预览按落库营业日归集。
+    </p>
+    <p class="msg">归属策略：{{ preview.attribution.label }} —— {{ preview.attribution.description }}</p>
     <div class="row">
       <label>实盘现金 <input type="number" step="0.01" v-model.number="declared" /></label>
       <button class="btn" :disabled="preview.sealed" @click="seal">封账</button>

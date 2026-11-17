@@ -3,12 +3,14 @@ import { onMounted, ref } from 'vue'
 import { api } from '../api'
 
 const day = ref('')
+const policy = ref(null)
 const msg = ref('')
 const err = ref('')
 
 onMounted(async () => {
-  const d = await api.getDay()
+  const [d, p] = await Promise.all([api.getDay(), api.attribution()])
   day.value = d.business_day
+  policy.value = p
 })
 
 async function save() {
@@ -28,4 +30,20 @@ async function save() {
   </div>
   <p v-if="msg" class="msg">{{ msg }}</p>
   <p v-if="err" class="msg err">{{ err }}</p>
+
+  <div class="panel" v-if="policy">
+    <h2>流水营业日归属</h2>
+    <p>
+      <span class="tag ok">{{ policy.label }}</span>
+      <code class="mono">{{ policy.policy }}</code>
+    </p>
+    <p class="msg">{{ policy.description }}</p>
+    <p class="msg">
+      归集依据：{{ policy.aggregation_basis }} —— 列表过滤、封账预览、批次合计、总览同源。
+    </p>
+    <p class="msg">
+      另一策略「{{ policy.alternatives[0].label }}」不实现，也不提供切换：
+      {{ policy.alternatives[0].reason }}
+    </p>
+  </div>
 </template>

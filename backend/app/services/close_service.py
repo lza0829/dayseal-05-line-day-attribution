@@ -2,6 +2,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 from fastapi import HTTPException
+from app import attribution
 from app.db import connect
 from app.repositories import closes as close_repo
 from app.repositories import lines as line_repo
@@ -13,16 +14,23 @@ def _now() -> str:
 
 
 def preview(business_day: str | None = None) -> dict[str, Any]:
+    """封账预览：只按落库 business_day 归集，与列表过滤、批次合计同一归属结果。"""
     conn = connect()
     try:
-        day = business_day or settings_repo.get(conn, "business_day") or ""
+        day = attribution.normalize_day(
+            business_day or settings_repo.get(conn, "business_day") or ""
+        )
         total, count = line_repo.day_total(conn, day)
+        corrected_total, corrected_count = line_repo.day_corrected_total(conn, day)
         return {
             "business_day": day,
-            "system_total": total,
+            "system_total": round(total, 2),
             "line_count": count,
+            "corrected_total": round(corrected_total, 2),
+            "corrected_count": corrected_count,
             "sealed": close_repo.is_sealed(conn, day),
             "lines": line_repo.list_lines(conn, day),
+            "attribution": attribution.describe(),
         }
     finally:
         conn.close()
@@ -31,15 +39,18 @@ def preview(business_day: str | None = None) -> dict[str, Any]:
 def seal(body: dict[str, Any]) -> dict[str, Any]:
     conn = connect(immediate=True)
     try:
-        day = body.get("business_day") or settings_repo.get(conn, "business_day")
-        if not day:
+        raw_day = body.get("business_day") or settings_repo.get(conn, "business_day")
+        if not raw_day:
             raise HTTPException(400, "未指定营业日")
+        day = attribution.normalize_day(raw_day)
         if close_repo.is_sealed(conn, day):
             raise HTTPException(409, f"营业日 {day} 已封账")
         declared = float(body["declared_cash"])
+        # 批次合计与预览同一归属结果：只按落库 business_day 求和。
         total, count = line_repo.day_total(conn, day)
         variance = round(declared - total, 2)
         sealed_at = _now()
+        corrected_total, corrected_count = line_repo.day_corrected_total(conn, day)
         batch_id = close_repo.create_batch(
             conn,
             batch_no=close_repo.next_batch_no(conn),
@@ -69,12 +80,48 @@ def seal(body: dict[str, Any]) -> dict[str, Any]:
             "declared_cash": declared,
             "variance": variance,
             "line_count": count,
+            "corrected_total": round(corrected_total, 2),
+            "corrected_count": corrected_count,
             "status": "sealed",
             "disposition": disposition,
         }
     except Exception:
         conn.rollback()
         raise
+    finally:
+        conn.close()
+
+
+def integrity() -> dict[str, Any]:
+    """归属自检：落库日 == 发生日；封账批次合计 == 落库日流水合计。"""
+    conn = connect()
+    try:
+        mismatched = line_repo.mismatched_lines(conn)
+        batches = close_repo.list_batches(conn)
+        drift = []
+        for batch in batches:
+            if batch["status"] != "sealed":
+                continue
+            total, count = line_repo.day_total(conn, batch["business_day"])
+            if abs(total - batch["system_total"]) > 1e-9 or count != batch["line_count"]:
+                drift.append(
+                    {
+                        "batch_no": batch["batch_no"],
+                        "business_day": batch["business_day"],
+                        "batch_total": batch["system_total"],
+                        "batch_line_count": batch["line_count"],
+                        "stored_total": round(total, 2),
+                        "stored_line_count": count,
+                    }
+                )
+        return {
+            "ok": not mismatched and not drift,
+            "attribution": attribution.describe(),
+            "mismatched_line_count": len(mismatched),
+            "mismatched_lines": mismatched,
+            "batch_drift_count": len(drift),
+            "batch_drift": drift,
+        }
     finally:
         conn.close()
 

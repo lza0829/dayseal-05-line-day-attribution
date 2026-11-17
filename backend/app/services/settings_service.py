@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Any
 from fastapi import HTTPException
+from app import attribution
 from app.db import connect
 from app.repositories import settings as settings_repo
 
@@ -14,9 +15,7 @@ def get_day() -> dict[str, Any]:
 
 
 def set_day(body: dict[str, Any]) -> dict[str, Any]:
-    day = (body.get("business_day") or "").strip()
-    if not day:
-        raise HTTPException(400, "营业日不能为空")
+    day = attribution.normalize_day(body.get("business_day"), "business_day")
     conn = connect(immediate=True)
     try:
         settings_repo.set_value(conn, "business_day", day)

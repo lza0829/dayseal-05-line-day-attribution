@@ -22,3 +22,9 @@ def batches():
 @router.get("/variances")
 def variances():
     return svc.list_variances()
+
+
+@router.get("/integrity")
+def integrity():
+    """归属 / 合计自检：落库日必须等于发生日，批次合计必须等于落库日合计。"""
+    return svc.integrity()

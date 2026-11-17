@@ -22,5 +22,10 @@ onMounted(async () => {
     <div class="stat"><div class="label">今日流水笔数</div><div class="value">{{ dash.line_count_today }}</div></div>
     <div class="stat"><div class="label">系统合计</div><div class="value">{{ dash.system_total_today.toFixed(2) }}</div></div>
     <div class="stat"><div class="label">封账状态</div><div class="value">{{ dash.sealed_today ? '已封' : '未封' }}</div></div>
+    <div class="stat" v-if="dash.corrected_count_today">
+      <div class="label">跨日改归</div>
+      <div class="value">{{ dash.corrected_count_today }} 笔 / {{ dash.corrected_total_today.toFixed(2) }}</div>
+    </div>
   </div>
+  <p v-if="dash" class="msg">归属：{{ dash.attribution.label }} —— 总览与封账预览、批次合计都只按落库营业日归集。</p>
 </template>
